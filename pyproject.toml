@@ -48,3 +48,33 @@ extend-select = ["UP"]
 ignore = [
     "F722"
 ]
+
+
+[tool.poetry]
+name = "assignment1-basics"
+version = "0.1.0"
+description = ""
+authors = ["PaoPaoYue <846260131@qq.com>"]
+readme = "README.md"
+packages = [{ include = "cs336_basics" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+einops = ">=0.8.1"                # tensor operations
+einx = ">=0.3.0"                  # more general tensor operations
+jaxtyping = ">=0.3.0"             # type hints for pytorch/jax/numpy
+numpy = "*"                       # no version specified
+psutil = ">=6.1.1"
+regex = ">=2024.11.6"              # more powerful regex than builtin `re`
+submitit = ">=1.5.2"               # job submission for SLURM
+tiktoken = ">=0.9.0"
+torch = { version = "~2.6.0", markers = 'sys_platform != "darwin" or platform_machine != "x86_64"' }
+tqdm = ">=4.67.1"
+wandb = ">=0.19.7"
+
+[tool.poetry.dev-dependencies]
+pytest = ">=8.3.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

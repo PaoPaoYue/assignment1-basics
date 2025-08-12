@@ -10,6 +10,7 @@ import torch
 from torch import Tensor
 
 
+from cs336_basics.nn_module import *
 
 def run_linear(
     d_in: int,
@@ -30,8 +31,7 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
-
+    return Linear(d_in, d_out,weights=weights).forward(in_features)
 
 def run_embedding(
     vocab_size: int,
@@ -52,7 +52,7 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    return Embedding(vocab_size, d_model, weights=weights).forward(token_ids)
 
 
 def run_swiglu(
@@ -84,7 +84,7 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    return  SwigluFFN(d_model, d_ff, w1_weights=w1_weight, w2_weights=w2_weight, w3_weights=w3_weight).forward(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -358,7 +358,6 @@ def run_transformer_lm(
     """
     raise NotImplementedError
 
-
 def run_rmsnorm(
     d_model: int,
     eps: float,
@@ -379,7 +378,7 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    return RMSNorm(d_model, eps, weights=weights).forward(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -537,6 +536,7 @@ def run_load_checkpoint(
     """
     raise NotImplementedError
 
+from cs336_basics.tokenizer import BpeTokenizer
 
 def get_tokenizer(
     vocab: dict[int, bytes],
@@ -558,8 +558,9 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    return BpeTokenizer(vocab=vocab, merges=merges, special_tokens=special_tokens)
 
+from cs336_basics.bpe import train_bpe
 
 def run_train_bpe(
     input_path: str | os.PathLike,
@@ -588,4 +589,9 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    return train_bpe(
+        input_path=input_path,
+        vocab_size=vocab_size,
+        special_tokens=special_tokens,
+        **kwargs,
+    )
