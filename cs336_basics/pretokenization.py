@@ -19,11 +19,12 @@ def pretokenize(
         input_path: str | os.PathLike,
         special_tokens: list[str],
         **kwargs) -> collections.Counter[tuple[bytes]]:
+    num_processors = kwargs.get("num_processors", 1)
     pretoken_byte_counts = collections.Counter()
     with open(input_path, "rb") as f:
         boundaries = find_chunk_boundaries(
             f,
-            kwargs.get("num_processes", 1),
+            num_processors,
             [t.encode("utf-8") for t in special_tokens],
         )
 
@@ -31,7 +32,7 @@ def pretokenize(
             ProcessChunkArgs(start, end, input_path, special_tokens)
             for start, end in zip(boundaries[:-1], boundaries[1:])
         ]
-        with Pool(kwargs.get("num_processes", 1)) as pool:
+        with Pool(num_processors) as pool:
             for chunk_pretoken_byte_counts in pool.imap_unordered(
                 process_chunk, chunk_args
             ):
@@ -80,7 +81,6 @@ def find_chunk_boundaries(
                 chunk_boundaries[bi] = initial_position + match.end()
                 break
             initial_position += mini_chunk_size
-
     # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
     return sorted(set(chunk_boundaries))
 
@@ -95,7 +95,7 @@ def process_chunk(args: ProcessChunkArgs) -> collections.Counter[tuple[bytes]]:
     with open(args.input_path, "rb") as f:
         f.seek(args.start)
         chunk = f.read(args.end - args.start).decode("utf-8", errors="ignore")
-    logger.info(f"Counting pretoken bytes for {(args.start, args.end)}")
+    logger.info("Counting pretoken bytes for [%d, %d)", args.start, args.end)
     if args.special_tokens:
         special_tokens_pattern = "|".join(regex.escape(t) for t in sorted(args.special_tokens, key=len, reverse=True))
         splits = regex.split(special_tokens_pattern, chunk)
@@ -107,6 +107,6 @@ def process_chunk(args: ProcessChunkArgs) -> collections.Counter[tuple[bytes]]:
         for split in splits
         for pretoken in regex.findall(PRETOKEN_PATTERN, split)
     )
-    logger.info(f"Done counting pretoken bytes for {(args.start, args.end)}")
+    logger.info("Finished counting pretoken bytes [%d, %d)", args.start, args.end)
     return pretoken_byte_counts
 

@@ -1,9 +1,125 @@
-import json
+from __future__ import annotations
+from dataclasses import dataclass
+from multiprocessing import Pool, Manager, Queue
+import pickle
+import logging
+import os
+import tempfile
+from threading import Thread
 from typing import Optional, Dict, List, Tuple, Iterator, Iterable
 import re
+import json
+import numpy as np
 import regex
+from tqdm import tqdm
+import zarr
 
-from cs336_basics.pretokenization import PRETOKEN_PATTERN, BYTE_CACHE
+from cs336_basics.pretokenization import PRETOKEN_PATTERN, BYTE_CACHE, find_chunk_boundaries
+from cs336_basics.utils import zarrs_1d_to_npy
+
+import logging
+logger = logging.getLogger(__name__)
+
+@dataclass
+class TokenizeParams:
+    input_path: str
+    vocab_dir_path: str
+    special_tokens: list[str]
+    chunk_size: int
+    num_processors: int
+    out_dir_path: str
+
+def tokenize(params: TokenizeParams) -> None:
+    os.makedirs(params.out_dir_path, exist_ok=True)
+
+    with open(params.input_path, "rb") as f:
+        boundaries = find_chunk_boundaries(
+            f,
+            params.num_processors,
+            [t.encode("utf-8") for t in params.special_tokens],
+        )
+    with tempfile.TemporaryDirectory(dir=f"{params.out_dir_path}/") as tmpdir:
+        with Manager() as manager:
+            queue = manager.Queue()
+            chunk_args = [
+                ProcessChunkArgs(start, 
+                                 end, 
+                                 params.input_path,  
+                                 params.vocab_dir_path, 
+                                 params.special_tokens, 
+                                 params.chunk_size, 
+                                 queue, 
+                                 tmpdir)
+                for start, end in zip(boundaries[:-1], boundaries[1:])
+            ]
+            Thread(
+                target=progress_listener, 
+                args=(queue,  os.path.getsize(params.input_path)), 
+                daemon=True
+            ).start()
+            with Pool(params.num_processors) as pool:
+                tmp_arrs = [tmp_arr for tmp_arr in pool.imap(process_chunk, chunk_args)]
+                queue.put(-1) # notify listener completion
+
+        logger.info("Finished tokenizing all chunks, concatenating results")
+        zarrs_1d_to_npy(tmp_arrs, f"{params.out_dir_path}/tokens.npy")
+
+    logger.info("Tokenized file %s and saved to %s", params.input_path, params.out_dir_path)
+
+__BATCH_SIZE = 1048576 # 4mb
+__REPORT_INTERVAL = 4096
+
+@dataclass
+class ProcessChunkArgs:
+    start: int
+    end: int
+    input_path: str | os.PathLike
+    vocab_dir_path: str
+    special_tokens: list[str]
+    chunk_size: int
+    queue: Queue
+    tmpdir: str
+
+def process_chunk(args: ProcessChunkArgs) -> zarr.Array:
+    with open(f"{args.vocab_dir_path}/vocab.pkl", "rb") as f:
+        vocab = pickle.load(f)
+    with open(f"{args.vocab_dir_path}/merges.pkl", "rb") as f:
+        merges = pickle.load(f)
+
+    tokenizer = BpeTokenizer(vocab, merges, special_tokens=args.special_tokens)
+
+    tmp_arr = zarr.open_array(store=zarr.DirectoryStore(f"{args.tmpdir}/chunk_{args.start}_{args.end}.zarr"),
+                               mode="w", shape=(0,), chunks=(args.chunk_size,), dtype=np.int32)
+    with open(args.input_path, "rb") as f:
+        f.seek(args.start)
+        buffer = np.zeros(args.chunk_size, dtype=np.int32)
+        buffer_index = 0
+        cur = args.start
+        for token in tokenizer.encode_iterable_bytes(f):
+            buffer[buffer_index] = token
+            buffer_index += 1
+            if buffer_index == args.chunk_size:
+                tmp_arr.append(buffer)
+                buffer_index = 0
+            
+            next = f.tell()
+            if next >= args.end:
+                break
+            if buffer_index % __REPORT_INTERVAL == 0:
+                args.queue.put(next-cur)
+                cur = next
+
+        if buffer_index > 0:
+            tmp_arr.append(buffer[:buffer_index])
+    return tmp_arr
+
+def progress_listener(queue: Queue, total: int):
+    with tqdm(desc="Tokenizing", total=total, unit="B", unit_scale=True) as pbar:
+        while True:
+            progress = queue.get()
+            if progress < 0:
+                break
+            pbar.update(progress)
 
 class BpeTokenizer:
     def __init__(
@@ -27,19 +143,19 @@ class BpeTokenizer:
         # 预处理 special tokens
         self.special_tokens: List[str] = list(special_tokens or [])
         # 映射 special string -> id（通过 utf-8 编码后的 bytes 查 id）
-        self.special_to_id: Dict[str, int] = {}
+        self.special_to_id: Dict[bytes, int] = {}
         for s in self.special_tokens:
             b = s.encode("utf-8")
             if b not in self.bytes_to_id:
                 raise ValueError(f"Special token {s!r} not found in vocab as bytes.")
-            self.special_to_id[s] = self.bytes_to_id[b]
+            self.special_to_id[b] = self.bytes_to_id[b]
 
         # 为编码阶段预编译一个用于切分 special 的正则（最长优先）
         if self.special_tokens:
             # 优先匹配更长的 special，防止前缀截断
             specials_sorted = sorted(self.special_tokens, key=len, reverse=True)
             pattern = "|".join(re.escape(s) for s in specials_sorted)
-            self.special_tokens_pattern = re.compile(pattern)
+            self.special_tokens_pattern = re.compile(pattern.encode("utf-8"))
         else:
             self.special_tokens_pattern = None
 
@@ -108,16 +224,21 @@ class BpeTokenizer:
 
 
     def encode(self, text: str) -> List[int]:
-        """
-        将文本编码为 token id 列表。
-        """
+        return self.encode_bytes(text.encode("utf-8", errors="replace"))
+    
+    def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
+        for data in iterable:
+            if not data:
+                continue
+            for tid in self.encode(data):
+                yield tid
+
+    def encode_bytes(self, text: bytes) -> List[bytes]:
         if not text:
             return []
 
         if not self.special_tokens_pattern:
-            # 无 special，直接全量走 Trie
-            data = text.encode("utf-8", errors="strict")
-            return self._encode_bytes_with_trie(data)
+            return self._encode_bytes_with_trie(text)
 
         ids: List[int] = []
         pos = 0
@@ -125,7 +246,7 @@ class BpeTokenizer:
             start, end = m.span()
             # 先处理 special 前面的普通片段
             if start > pos:
-                chunk = text[pos:start].encode("utf-8", errors="strict")
+                chunk = text[pos:start]
                 ids.extend(self._encode_bytes_with_trie(chunk))
 
             # 处理 special 本身
@@ -134,7 +255,7 @@ class BpeTokenizer:
             if tid is None:
                 # 若未声明为 special（或不在 vocab），回退成普通文本处理
                 # 一般不会触发，因为 __init__ 已校验 special 均在 vocab
-                ids.extend(self._encode_bytes_with_trie(ssp.encode("utf-8", errors="strict")))
+                ids.extend(self._encode_bytes_with_trie(ssp))
             else:
                 ids.append(tid)
 
@@ -142,39 +263,38 @@ class BpeTokenizer:
 
         # 处理最后的尾部普通片段
         if pos < len(text):
-            tail = text[pos:].encode("utf-8", errors="strict")
+            tail = text[pos:]
             ids.extend(self._encode_bytes_with_trie(tail))
 
         return ids
-    
-    def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
+
+    def encode_iterable_bytes(self, iterable: Iterable[bytes]) -> Iterator[int]:
         """
-        流式编码：对一个字符串可迭代对象逐个编码并按顺序产出 token id。
-        - 与 encode(text) 的切分逻辑一致（包含 special_tokens 处理）
+        流式编码：对一个字节可迭代对象逐个编码并按顺序产出 token id。
+        - 与 encode_bytes(text) 的切分逻辑一致（包含 special_tokens 处理）
         - 不会在元素之间插入任何分隔符
         - 不跨元素匹配 special token
         """
         if self.special_tokens_pattern is None:
             # 无 special，直接按块进行字节级最长匹配
-            for text in iterable:
-                if not text:
+            for data in iterable:
+                if not data:
                     continue
-                data = text.encode("utf-8", errors="strict")
                 for tid in self._encode_bytes_with_trie(data):
                     yield tid
             return
 
-        # 有 special，逐块在字符层面先切分 special，再进行字节级匹配
-        for text in iterable:
-            if not text:
+        # 有 special，逐块在字节层面先切分 special，再进行字节级匹配
+        for data in iterable:
+            if not data:
                 continue
 
             pos = 0
-            for m in self.special_tokens_pattern.finditer(text):
+            for m in self.special_tokens_pattern.finditer(data):
                 start, end = m.span()
                 # 先处理 special 前面的普通片段
                 if start > pos:
-                    chunk = text[pos:start].encode("utf-8", errors="strict")
+                    chunk = data[pos:start]
                     for tid in self._encode_bytes_with_trie(chunk):
                         yield tid
 
@@ -193,8 +313,8 @@ class BpeTokenizer:
                 pos = end
 
             # 处理尾部普通片段
-            if pos < len(text):
-                tail = text[pos:].encode("utf-8", errors="strict")
+            if pos < len(data):
+                tail = data[pos:]
                 for tid in self._encode_bytes_with_trie(tail):
                     yield tid
 
@@ -204,7 +324,7 @@ class BpeTokenizer:
         - 先拼接 bytes，再用 UTF-8 解码；
         - 使用 errors="replace" 以容忍任何非标准字节序列，避免解码异常。
         """
-        if not ids:
+        if ids is None or len(ids) < 0:
             return ""
         try:
             data = b"".join(self.id_to_bytes[i] for i in ids)

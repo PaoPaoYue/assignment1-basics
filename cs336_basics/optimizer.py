@@ -54,6 +54,8 @@ class AdamW(torch.optim.Optimizer):
                 state["v"] = v
                 state["t"] = t + 1 
                 return loss
+            
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 def lr_cosine_schedule(
     it: int,

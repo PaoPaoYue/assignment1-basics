@@ -608,11 +608,10 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    return load_checkpoint(
-        src=src,
-        model=model,
-        optimizer=optimizer,
-    )
+    model_state, optimizer_state, _, info = load_checkpoint(src)
+    model.load_state_dict(model_state)
+    optimizer.load_state_dict(optimizer_state)
+    return info["iteration"]
 
 from cs336_basics.tokenizer import BpeTokenizer
 

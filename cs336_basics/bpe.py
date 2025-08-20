@@ -1,6 +1,7 @@
 import collections
+from dataclasses import dataclass
+import pickle
 import os
-import regex
 from tqdm import tqdm
 
 from cs336_basics.pretokenization import pretokenize
@@ -8,12 +9,16 @@ from cs336_basics.pretokenization import pretokenize
 import logging
 logger = logging.getLogger(__name__)
 
+@dataclass
+class BpeParams:
+    input_path: str
+    vocab_size: int
+    special_tokens: list[str]
+    num_processors: int
+    out_dir_path: str
 
 def train_bpe(
-    input_path: str | os.PathLike,
-    vocab_size: int,
-    special_tokens: list[str],
-    **kwargs,
+    params: BpeParams,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     """Given the path to an input corpus, run train a BPE tokenizer and
     output its vocabulary and merges.
@@ -37,20 +42,29 @@ def train_bpe(
           Merges are ordered by order of creation.
     """
     pretoken_byte_counts = pretokenize(
-        input_path=input_path,
-        special_tokens=special_tokens,
-        **kwargs,
+        input_path=params.input_path,
+        special_tokens=params.special_tokens,
+        num_processors=params.num_processors
     )
 
-    vocab_list = [token.encode("utf-8") for token in special_tokens] + [bytes([i]) for i in range(256)]
+    vocab_list = [token.encode("utf-8") for token in params.special_tokens] + [bytes([i]) for i in range(256)]
 
     logger.info("Determining merges")
-    merges = determine_merges(pretoken_byte_counts, vocab_size - len(vocab_list))
+    merges = determine_merges(pretoken_byte_counts, params.vocab_size - len(vocab_list))
     logger.info("Done determining merges")
 
     vocab_list.extend([b"".join((a, b)) for a, b in merges])
 
     vocab = {i: token for i, token in enumerate(vocab_list)}
+
+    if params.out_dir_path:
+        os.makedirs(params.out_dir_path, exist_ok=True)
+        with open(f"{params.out_dir_path}/vocab.pkl", "wb") as f:
+            pickle.dump(vocab, f)
+            logger.info("Saved vocabulary to %s", f"{params.out_dir_path}/vocab.pkl")
+        with open(f"{params.out_dir_path}/merges.pkl", "wb") as f:
+            pickle.dump(merges, f)
+            logger.info("Saved merges to %s", f"{params.out_dir_path}/merges.pkl")
     return vocab, merges
 
 def determine_merges(
@@ -119,5 +133,4 @@ def determine_merges(
                 pair_counts[pair] += freq
                 new_pairs[pair] += 1
             token_to_pairs[new_token] = new_pairs
-    print(merges)
     return merges
