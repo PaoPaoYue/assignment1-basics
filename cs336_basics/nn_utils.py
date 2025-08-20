@@ -45,10 +45,9 @@ def top_p_sampling(inputs:torch.Tensor, top_p: float) -> torch.Tensor:
     mask = cumulative_probs >= top_p
     if torch.any(mask):
         first_mask_idx = torch.argmax(mask.int(), dim=-1)
-        sorted_probs = [sorted_probs[i, :first_mask_idx[i]+1] for i in range(mask.shape[0])]
-        sorted_indices = [sorted_indices[i, :first_mask_idx[i]+1] for i in range(mask.shape[0])]
-        outputs = torch.zeros_like(inputs)
+        sorted_indices = [sorted_indices[i, first_mask_idx[i]+1:] for i in range(mask.shape[0])]
+        outputs = inputs.clone()
         for i in range(mask.shape[0]):
-            outputs[i, sorted_indices[i]] = sorted_probs[i]
+            outputs[i, sorted_indices[i]] = 0
         outputs = outputs / outputs.sum(dim=-1, keepdim=True)
     return outputs
