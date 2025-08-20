@@ -11,6 +11,7 @@ import wandb
 from cs336_basics.bpe import *
 from cs336_basics.tokenizer import *
 from cs336_basics.train import *
+from cs336_basics.inference import *
 from cs336_basics.utils import dict_to_params
 
 logger = logging.getLogger()
@@ -20,6 +21,7 @@ class Command(enum.Enum):
     BPE = "train_bpe"
     TOKENIZE = "tokenize"
     TRAIN = "train_model"
+    CHAT = "chat"
 
 
 def parse_args():
@@ -77,6 +79,18 @@ def parse_args():
 
     train_parser.add_argument("--device", type=str, default="cuda")
 
+    # ===== CHAT =====
+    chat_parser = subparsers.add_parser("chat", help="Start chat with the model")
+    chat_parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to model checkpoint")
+    chat_parser.add_argument("--vocab_dir_path", type=str, required=True, help="Path to vocabulary directory")
+
+    chat_parser.add_argument("--special_tokens", type=str, nargs="+", default=['<|endoftext|>'], help="List of special tokens")
+    chat_parser.add_argument("--max_gen_len", type=int, default=256, help="Maximum generation length")
+    chat_parser.add_argument("--temperature", type=float, default=1.0, help="Sampling temperature")
+    chat_parser.add_argument("--top_p", type=float, default=0.0, help="Top-p (nucleus) sampling parameter")
+
+    chat_parser.add_argument("--device", type=str, default="cuda")
+
     args = parser.parse_args()
 
     if args.command == Command.BPE.value:
@@ -85,6 +99,8 @@ def parse_args():
         params = dict_to_params(args, TokenizeParams)
     elif args.command == Command.TRAIN.value:
         params = dict_to_params(args, TrainParams)
+    elif args.command == Command.CHAT.value:
+        params = dict_to_params(args, ChatParams)
     else:
         parser.error(f"Unknown command: {args.command}")
 
@@ -102,3 +118,5 @@ if __name__ == "__main__":
         tokenize(params)
     elif args.command == Command.TRAIN.value:
         train_model(params)
+    elif args.command == Command.CHAT.value:
+        chat(params)

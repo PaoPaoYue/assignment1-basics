@@ -23,7 +23,7 @@ def save_checkpoint(
 def load_checkpoint(
     src: str | os.PathLike | BinaryIO | IO[bytes]
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
-    checkpoint_data = torch.load(src)
+    checkpoint_data = torch.load(src, weights_only=False)
     return (checkpoint_data["model_state_dict"], 
             checkpoint_data["optimizer_state_dict"], 
             checkpoint_data["scheduler_state_dict"], 

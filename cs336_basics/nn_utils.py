@@ -38,3 +38,17 @@ def gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: flo
             if p.grad is not None:
                 p.grad.data.mul_(max_l2_norm / (grad_norm + eps))
     return grad_norm.item()
+
+def top_p_sampling(inputs:torch.Tensor, top_p: float) -> torch.Tensor:
+    sorted_probs, sorted_indices = torch.sort(inputs, descending=True)
+    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+    mask = cumulative_probs >= top_p
+    if torch.any(mask):
+        first_mask_idx = torch.argmax(mask.int(), dim=-1)
+        sorted_probs = [sorted_probs[i, :first_mask_idx[i]+1] for i in range(mask.shape[0])]
+        sorted_indices = [sorted_indices[i, :first_mask_idx[i]+1] for i in range(mask.shape[0])]
+        outputs = torch.zeros_like(inputs)
+        for i in range(mask.shape[0]):
+            outputs[i, sorted_indices[i]] = sorted_probs[i]
+        outputs = outputs / outputs.sum(dim=-1, keepdim=True)
+    return outputs
