@@ -26,7 +26,7 @@ class ChatParams:
 
 
 def chat(params: ChatParams):
-    model, train_params = init_model(params.checkpoint_path, params.device)
+    model, _ = init_model(params.checkpoint_path, params.device)
     tokenizer = init_tokenizer(params.vocab_dir_path, params.special_tokens)
 
     print("=" * 50)
@@ -43,7 +43,7 @@ def chat(params: ChatParams):
             break
 
         print("🤖 模型:", end=" ", flush=True)
-        for chunk in inference(prompt, model, tokenizer, train_params, params):
+        for chunk in inference(prompt, model, tokenizer, params):
             print(chunk, end="", flush=True)
         print()  # 输出换行
         round += 1
@@ -92,7 +92,6 @@ def inference(
     prompt: str,
     model: nn.Module,
     tokenizer: BpeTokenizer,
-    train_params: TrainParams,
     chat_params: ChatParams
 ) -> Iterable[str]:
 
@@ -100,11 +99,9 @@ def inference(
     current_token = -1
 
     inputs = tokenizer.encode(prompt)
-    prompt_len = len(inputs)
     inputs = torch.tensor(inputs, dtype=torch.long).unsqueeze(0) 
     while True:
-        if token_count >= chat_params.max_gen_len or \
-            prompt_len + token_count >= train_params.context_length:
+        if token_count >= chat_params.max_gen_len:
             break
 
         outputs = model(inputs)

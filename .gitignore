@@ -165,4 +165,5 @@ cython_debug/
 log
 data/
 wandb/
+artifacts/
 test.py

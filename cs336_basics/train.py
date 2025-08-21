@@ -4,11 +4,12 @@ import time
 import random
 from pathlib import Path
 
+from cs336_basics.optimizer import CosineAnnealingWithPrewarmRestarts
 import numpy as np
+from pytest import param
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import wandb
@@ -40,7 +41,7 @@ class TrainParams:
     num_heads: int = 16
     rope_theta: float = 10000.0
 
-    lr: float = 1e-2
+    lr: float = 1e-3
     batch_size: int = 64
     loader_num_workers: int = 8
     max_norm: float = 0
@@ -48,8 +49,10 @@ class TrainParams:
     optimizer_beta2: float = 0.999
     optimizer_weight_decay: float = 0.01
     scheduler_t: int = 5
+    scheduler_t_warmup: float = 0.1
     scheduler_t_mult: int = 1
     scheduler_min_lr: float = 0
+    schduler_warmup_lr_factor: float = 0
 
     num_epochs: int = 10
     patience: int = 3
@@ -84,11 +87,13 @@ def train_model(params:TrainParams):
         betas=(params.optimizer_beta1, params.optimizer_beta2),
         weight_decay=params.optimizer_weight_decay
     )
-    scheduler = CosineAnnealingWarmRestarts(
+    scheduler = CosineAnnealingWithPrewarmRestarts(
         optimizer,
         T_0=params.scheduler_t,
+        T_warmup=params.scheduler_t_warmup,
         T_mult=params.scheduler_t_mult,
         eta_min=params.scheduler_min_lr,
+        eta_warmup_factor=params.schduler_warmup_lr_factor,
     )
     scaler = torch.amp.GradScaler()
 
@@ -99,8 +104,6 @@ def train_model(params:TrainParams):
     logger.info(f"Starting training with parameters: total_params={total_params}, trainable_params={trainable_params}")
 
     # ========= 训练循环（含早停与最优模型保存）=========
-    best_path: Path | None = None
-
     for epoch in range(1, params.num_epochs + 1):
         train_metrics = train_one_epoch(
             epoch,
@@ -133,7 +136,7 @@ def train_model(params:TrainParams):
             state.best_metric = current_metric
             state.epochs_no_improve = 0
 
-            best_path = save_checkpoint_only_best(
+            save_checkpoint_only_best(
                 save_dir=Path(params.checkpoint_path),
                 model=model,
                 optimizer=optimizer,
@@ -184,7 +187,7 @@ def train_one_epoch(
     model: nn.Module,
     loader: DataLoader,
     optimizer: torch.optim.Optimizer,
-    scheduler: CosineAnnealingWarmRestarts,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
     scaler: torch.amp.GradScaler,
     device: torch.device,
     train_params: TrainParams
@@ -213,7 +216,7 @@ def train_one_epoch(
         scaler.step(optimizer)
         scaler.update()
 
-        scheduler.step(epoch + (i + 1) / len(loader))
+        scheduler.step((epoch - 1) + (i + 1) / len(loader))
 
         running_loss += loss.item() * inputs.size(0)
         max_grad = max(max_grad, norm_grad)
@@ -309,10 +312,10 @@ def save_checkpoint_only_best(
     save_dir: Path,
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
-    scheduler: CosineAnnealingWarmRestarts,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
     params: TrainParams,
     state: TrainState
-) -> Path:
+):
     """
     只保留当前最优模型：保存新 best，删除旧 best。
     返回新的 best 路径。
@@ -337,5 +340,3 @@ def save_checkpoint_only_best(
                 old_ckpt.unlink()
             except Exception as e:
                 print(f"[WARN] Failed to delete old checkpoint: {old_ckpt} ({e})")
-
-    return ckpt_path

@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import torch
 import os
 from typing import Any, BinaryIO, IO
@@ -7,7 +6,7 @@ def save_checkpoint(
     out: str | os.PathLike | BinaryIO | IO[bytes],
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer = None,
-    scheduler: torch.optim.lr_scheduler = None,
+    scheduler: torch.optim.lr_scheduler.LRScheduler = None,
     **kwargs
 ):
     os.makedirs(os.path.dirname(out), exist_ok=True)

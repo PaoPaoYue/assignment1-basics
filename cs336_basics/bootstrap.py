@@ -50,7 +50,7 @@ def parse_args():
     train_parser = subparsers.add_parser("train_model", help="Train language model")
     train_parser.add_argument("--train_dir_path", type=str, required=True)
     train_parser.add_argument("--valid_dir_path", type=str, required=True)
-    train_parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to save model checkpoints")
+    train_parser.add_argument("--checkpoint_path", type=str, required=True)
 
     train_parser.add_argument("--seed", type=int, default=42)
 
@@ -70,8 +70,10 @@ def parse_args():
     train_parser.add_argument("--optimizer_beta2", type=float, default=0.999)
     train_parser.add_argument("--optimizer_weight_decay", type=float, default=0.01)
     train_parser.add_argument("--scheduler_t", type=int, default=5)
+    train_parser.add_argument("--scheduler_t_warmup", type=float, default=0.1)
     train_parser.add_argument("--scheduler_t_mult", type=int, default=1)
     train_parser.add_argument("--scheduler_min_lr", type=float, default=0.0)
+    train_parser.add_argument("--schduler_warmup_lr_factor", type=float, default=0.0)
 
     train_parser.add_argument("--num_epochs", type=int, default=10)
     train_parser.add_argument("--patience", type=int, default=3)

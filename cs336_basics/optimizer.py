@@ -57,6 +57,35 @@ class AdamW(torch.optim.Optimizer):
             
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
+
+class CosineAnnealingWithPrewarmRestarts(CosineAnnealingWarmRestarts):
+    def __init__(self, 
+            optimizer, 
+            T_0, 
+            T_warmup = 0.1,
+            T_mult = 1, 
+            eta_min = 0, 
+            eta_warmup_factor = 0.1,
+            last_epoch = -1, 
+            verbose="deprecated"):
+        if not (0 <= eta_warmup_factor <= 1):
+            raise ValueError(f"eta_warmup_factor must be between 0 and 1, got {eta_warmup_factor}")
+        if T_warmup > T_0:
+            raise ValueError(f"T_warmup must be less than or equal to T_0, got T_warmup={T_warmup} and T_0={T_0}")
+        self.T_warmup = T_warmup
+        self.eta_warmup_factor = eta_warmup_factor
+        super().__init__(optimizer, T_0, T_mult, eta_min, last_epoch, verbose)
+
+    def get_lr(self):
+        base_lrs = super().get_lr()
+        if self.T_cur < self.T_warmup:
+            # Linear warmup
+            warmup_factor = self.T_cur / self.T_warmup
+            lrs = [base_lr * (warmup_factor * (1 - self.eta_warmup_factor) + self.eta_warmup_factor) for base_lr in base_lrs]
+            return lrs
+        else:
+            return base_lrs
+
 def lr_cosine_schedule(
     it: int,
     max_learning_rate: float,
