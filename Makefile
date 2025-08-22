@@ -35,6 +35,6 @@ chat:
 		--top_p 0.5
 
 upload_model:
-	wandb artifact put artifacts/checkpoints --type:model
+	poetry run wandb artifact put artifacts/checkpoints --type model
 
 .PHONY: init_wandb download_artifacts train_bpe tokenize train_model chat upload_model
