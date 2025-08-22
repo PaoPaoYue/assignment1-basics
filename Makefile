@@ -1,6 +1,6 @@
 init_wandb:
-	export WANDB_PROJECT=cs336-ass1
 	poetry run wandb login
+	export WANDB_PROJECT=cs336-ass1
 
 download_artifacts:
 	poetry run wandb artifact get tokens_tinystoriesV2_valid_valid:v0
