@@ -195,8 +195,7 @@ def train_one_epoch(
     model.train()
     running_loss = 0.0
     correct = 0
-    total_tokens = 0
-    total_cases = 0
+    total = 0
     max_grad = 0
 
     pbar = tqdm(loader, desc=f"Train | Epoch {epoch}", leave=False)
@@ -218,18 +217,17 @@ def train_one_epoch(
 
         scheduler.step((epoch - 1) + (i + 1) / len(loader))
 
-        running_loss += loss.item() * inputs.size(0)
+        running_loss += loss.item()
         max_grad = max(max_grad, norm_grad)
         preds = outputs.argmax(dim=-1)
         correct += preds.eq(targets).sum().item()
-        total_tokens += targets.numel()
-        total_cases += inputs.size(0)
+        total += targets.numel()
 
-        pbar.set_postfix(loss=running_loss / total_cases, acc=correct / total_tokens, grad=norm_grad)
+        pbar.set_postfix(loss=running_loss / (i+1), acc=correct / total, grad=norm_grad)
 
     return {
-        "train_loss": running_loss / total_cases,
-        "train_acc": correct / total_tokens,
+        "train_loss": running_loss / (i+1),
+        "train_acc": correct / total,
         "train_max_grad": max_grad
     }
 
@@ -243,38 +241,30 @@ def validate(
 ) -> dict[str, float]:
     model.eval()
     running_loss = 0.0
-    running_ppl = 0.0
     correct = 0
-    total_tokens = 0
-    total_cases = 0
+    total = 0
 
     pbar = tqdm(loader, desc=f"Valid | Epoch {epoch}", leave=False)
-    for inputs, targets in pbar:
+    for i, (inputs, targets) in enumerate(pbar):
         inputs = inputs.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
         outputs = model(inputs)
         loss = cross_entropy(outputs, targets)
-        running_loss += loss.sum().item()
-
-        ppl = perplexity(outputs, targets)  
-        running_ppl += ppl.sum().item()
+        running_loss += loss.mean().item()
 
         preds = outputs.argmax(dim=-1)
         correct += preds.eq(targets).sum().item()
-        total_tokens += targets.numel()
-        total_cases += inputs.size(0)
+        total += targets.numel()
 
         pbar.set_postfix(
-            loss=running_loss / total_cases,
-            acc=correct / total_tokens,
-            ppl=running_ppl / total_cases
+            loss=running_loss / (i+1),
+            acc=correct / total,
         )
 
     return {
-        "val_loss": running_loss / total_cases,
-        "val_acc": correct / total_tokens,
-        "val_ppl": running_ppl / total_cases
+        "val_loss": running_loss / (i+1),
+        "val_acc": correct / total,
     }
 
 # ========== 工具函数 ==========
