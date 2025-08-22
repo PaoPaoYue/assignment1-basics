@@ -1,10 +1,10 @@
 init_wandb:
 	export WANDB_PROJECT=cs336-ass1
-	wandb login
+	poetry run wandb login
 
 download_artifacts:
-	wandb artifact get tokens_tinystoriesV2_valid_valid:v0
-	wandb artifact get tokens_tinystoriesV2_valid_train:v0
+	poetry run wandb artifact get tokens_tinystoriesV2_valid_valid:v0
+	poetry run wandb artifact get tokens_tinystoriesV2_valid_train:v0
 
 train_bpe:
 	poetry run python cs336_basics/bootstrap.py train_bpe \
