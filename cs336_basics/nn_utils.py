@@ -14,18 +14,19 @@ def softmax(in_features:torch.Tensor, dim: int) -> torch.Tensor:
     exp_values = torch.exp(in_features - in_features.max(dim=dim, keepdim=True).values)
     return exp_values / exp_values.sum(dim=dim, keepdim=True)
 
-def cross_entropy(inputs:torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+def cross_entropy(inputs:torch.Tensor, targets: torch.Tensor, reduce: bool=False) -> torch.Tensor:
     log_probs = F.log_softmax(inputs, dim=-1)
     nll = -torch.gather(log_probs, -1, targets.unsqueeze(-1)).squeeze(-1)
+    if reduce:
+        return nll.mean()
     return nll.mean(dim=-1)
 
-def perplexity(
-    logits: torch.Tensor,
-    targets: torch.Tensor,
-) -> torch.Tensor:
+def perplexity(logits: torch.Tensor, targets: torch.Tensor, reduce: bool=False) -> torch.Tensor:
     log_probs = F.log_softmax(logits, dim=-1)
     nll = -torch.gather(log_probs, -1, targets.unsqueeze(-1)).squeeze(-1)
-    return torch.exp(nll.mean(dim=-1))
+    if reduce:
+        return torch.exp(nll.mean())
+    return torch.exp(nll)
 
 def gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float, eps: float=1e-6) -> float:
     grad_norm = []

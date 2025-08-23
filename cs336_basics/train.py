@@ -207,8 +207,7 @@ def train_one_epoch(
 
         with torch.amp.autocast(device_type="cuda"):
             outputs = model(inputs)
-            loss = cross_entropy(outputs, targets)
-            loss = loss.mean()
+            loss = cross_entropy(outputs, targets, reduce=True)
 
         scaler.scale(loss).backward()
         norm_grad = gradient_clipping(model.parameters(), train_params.max_norm)
@@ -250,8 +249,8 @@ def validate(
         targets = targets.to(device, non_blocking=True)
 
         outputs = model(inputs)
-        loss = cross_entropy(outputs, targets)
-        running_loss += loss.mean().item()
+        loss = cross_entropy(outputs, targets, reduce=True)
+        running_loss += loss.item()
 
         preds = outputs.argmax(dim=-1)
         correct += preds.eq(targets).sum().item()
