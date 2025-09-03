@@ -21,7 +21,7 @@ class SGD(torch.optim.Optimizer):
             grad = p.grad.data # Get the gradient of loss with respect to p.
             p.data -= lr / math.sqrt(t + 1) * grad # Update weight tensor in-place.
             state["t"] = t + 1 # Increment iteration number.
-            return loss
+        return loss
 
 class AdamW(torch.optim.Optimizer):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
@@ -53,7 +53,7 @@ class AdamW(torch.optim.Optimizer):
                 state["m"] = m
                 state["v"] = v
                 state["t"] = t + 1 
-                return loss
+        return loss
             
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
