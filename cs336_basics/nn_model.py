@@ -200,14 +200,12 @@ class TransformerBlock(nn.Module):
             dtype=dtype
         )
 
-    def forward(self, x: torch.Tensor, token_positions: torch.Tensor = None, mask: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor = None) -> torch.Tensor:
         seq_len = x.size(-2)
         if token_positions is None:
             token_positions = torch.arange(seq_len, device=x.device)
-        if mask is None:
-            mask = torch.tril(torch.ones((seq_len, seq_len), device=x.device))
-
-        x = self.attn(self.ln1(x), token_positions=token_positions, mask=mask) + x
+        
+        x = self.attn(self.ln1(x), token_positions=token_positions) + x
         x = self.ffn(self.ln2(x)) + x
         return x
 
