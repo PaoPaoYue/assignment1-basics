@@ -4,9 +4,7 @@ import time
 import random
 from pathlib import Path
 
-from cs336_basics.optimizer import CosineAnnealingWithPrewarmRestarts
 import numpy as np
-from pytest import param
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
@@ -18,6 +16,7 @@ from cs336_basics.checkpoint import save_checkpoint
 from cs336_basics.data_loader import RandomStartBatchSampler, TokensDataset
 from cs336_basics.nn_model import TransformerLM
 from cs336_basics.nn_utils import *
+from cs336_basics.optimizer import CosineAnnealingWithPrewarmRestarts
 
 import logging
 logger = logging.getLogger(__name__)
