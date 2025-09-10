@@ -67,7 +67,7 @@ class TrainState:
 
 def train_model(params:TrainParams):
     set_seed(params.seed)
-    state = TrainState(epoch=0, best_metric=float("inf"), epochs_no_improve=0)
+    state = TrainState(epoch=0, best_metric=float("inf") if __MAJOR_METRIC_GOAL == "minimize" else -float("inf"), epochs_no_improve=0)
 
     train_loader, valid_loader = get_dataloaders(params)
     model = TransformerLM(
