@@ -150,10 +150,10 @@ def train_model(params:TrainParams):
             state.epochs_no_improve += 1
 
         if state.epochs_no_improve >= params.patience:
-            print(f"Early stopping at epoch {epoch}: no improvement in {params.patience} epochs.")
+            logger.info(f"Early stopping at epoch {epoch}: no improvement in {params.patience} epochs.")
             break
 
-    print(f"Training finished. Best {__MAJOR_METRIC_NAME}: {state.best_metric:.6f}")
+    logger.info(f"Training finished. Best {__MAJOR_METRIC_NAME}: {state.best_metric:.6f}")
 
     wandb.finish()
 
@@ -327,4 +327,4 @@ def save_checkpoint_only_best(
             try:
                 old_ckpt.unlink()
             except Exception as e:
-                print(f"[WARN] Failed to delete old checkpoint: {old_ckpt} ({e})")
+                logger.warning(f"[WARN] Failed to delete old checkpoint: {old_ckpt} ({e})")
